@@ -14,7 +14,7 @@ acs_vars <- c("AGEP", "SEX", "RAC1P", "HISP", "PINCP", "ESR",
               "DIS", "HINS3", "HINS4", "ST", "PUMA", "PWGTP", "CIT")
 
 # Ensure API key is properly set and handled
-api_key <- Sys.getenv("CENSUS_API_KEY", "526de8855a78f2fb4fa424b37031e1a775ad7a96")
+api_key <- Sys.getenv("CENSUS_API_KEY", "INSERT-YOUR-KEY")
 if(nchar(api_key) < 10) {
   warning("Census API key may not be properly set")
 }
@@ -53,7 +53,7 @@ write_csv(pums_clean, "data/processed/synthetic_population.csv")
 
 sahie_data <- getCensus(
   name = "timeseries/healthins/sahie",
-  key = "526de8855a78f2fb4fa424b37031e1a775ad7a96",
+  key = "INSERT-YOUR-KEY",
   vars = c("NAME", "NIPR_PT", "PCTUI_PT", "IPR_DESC"),  
   region = "county:*",
   time = 2021  
