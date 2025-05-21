@@ -15,8 +15,8 @@ This repository contains a microsimulation model that projects the health system
 - `medicaid_impact_model_updated_scenarios.R`: R script containing the microsimulation model with both base case (CBO) and higher impact (CBPP) scenarios
 - `final_main_text_updated_scenarios.md`: Main text of the research paper with results and discussion
 - `final_appendix_updated_scenarios.md`: Detailed appendix with methodological details, parameter sources, and supplementary tables
-- `base_case/figures/`: Visualizations for the base case scenario (CBO projections)
-- `higher_impact/figures/`: Visualizations for the higher impact scenario (CBPP projections)
+- `base_case/figures/`: Visualizations for the base case scenario 
+- `higher_impact/figures/`: Visualizations for the higher impact scenario )
 
 ## Model Description
 
