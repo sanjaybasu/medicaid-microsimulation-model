@@ -3,6 +3,7 @@
 # This model projects the health system and economic impacts of proposed Medicaid policy changes
 # All parameters are empirically derived from peer-reviewed literature and authoritative sources
 # Code is designed to be fully reproducible by independent reviewers
+# Includes both CBO (base case) and CBPP (worst case) scenarios
 
 # Load required libraries
 library(ggplot2)
@@ -13,17 +14,36 @@ library(gridExtra)
 set.seed(123)
 
 #==============================================
+# SCENARIO SELECTION
+#==============================================
+
+# Set to TRUE for worst case scenario (CBPP projections), FALSE for base case (CBO projections)
+worst_case_scenario <- FALSE
+
+#==============================================
 # EMPIRICALLY VALIDATED PARAMETERS FROM LITERATURE
 #==============================================
 
-# Coverage change parameters from CBO projections
-coverage_params <- list(
+# Base case: Coverage change parameters from CBO projections
+cbo_coverage_params <- list(
   medicaid_reduction = 10.3,        # Millions losing Medicaid by 2034 (CBO, 2025)
   state_only_reduction = 1.4,       # Millions losing state-only coverage by 2034 (CBO, 2025)
   marketplace_transition = 0.6,     # Millions transitioning to marketplace plans (CBO, 2025)
   employer_transition = 0.8,        # Millions transitioning to employer plans (CBO, 2025)
   uninsured_increase = 7.6          # Millions becoming uninsured (CBO, 2025)
 )
+
+# Worst case: Coverage change parameters from CBPP projections
+cbpp_coverage_params <- list(
+  medicaid_reduction = 14.4,        # Millions losing Medicaid by 2034 (CBPP, 2025)
+  state_only_reduction = 1.4,       # Millions losing state-only coverage by 2034 (same as CBO)
+  marketplace_transition = 0.6,     # Millions transitioning to marketplace plans (same as CBO)
+  employer_transition = 0.8,        # Millions transitioning to employer plans (same as CBO)
+  uninsured_increase = 11.7         # Millions becoming uninsured (calculated from CBPP projection)
+)
+
+# Select coverage parameters based on scenario
+coverage_params <- if(worst_case_scenario) cbpp_coverage_params else cbo_coverage_params
 
 # Health outcome parameters from peer-reviewed literature
 health_outcome_params <- list(
@@ -224,9 +244,16 @@ calculate_economic_impacts <- function(coverage_changes, params) {
 # Function to calculate healthcare system impacts
 calculate_healthcare_impacts <- function(coverage_changes, params_rural, params_safety_net) {
   # Calculate rural hospital impacts
+  # For worst case scenario, scale the closure risk increase based on the ratio of coverage loss
+  medicaid_reduction_ratio <- if(worst_case_scenario) {
+    coverage_changes$Medicaid_Reduction_M / 10.3  # Ratio relative to CBO base case
+  } else {
+    coverage_changes$Medicaid_Reduction_M / 10.3
+  }
+  
   at_risk_hospitals <- params_rural$total_rural_hospitals * 
     (params_rural$baseline_closure_risk / 100) * 
-    (1 + params_rural$closure_risk_increase * coverage_changes$Medicaid_Reduction_M / 10.3)
+    (1 + params_rural$closure_risk_increase * medicaid_reduction_ratio)
   
   # Calculate FQHC impacts
   medicaid_patients_lost <- coverage_changes$Medicaid_Reduction_M * 1000000 * 
@@ -239,9 +266,12 @@ calculate_healthcare_impacts <- function(coverage_changes, params_rural, params_
   revenue_change <- (medicaid_patients_lost * params_safety_net$fqhc_revenue_medicaid -
                      uninsured_patients_gained * params_safety_net$fqhc_revenue_uninsured) / 1000000000
   
-  # Use the pre-calculated revenue reduction percentage from the parameters
-  # This is based on detailed HRSA UDS data analysis
-  revenue_reduction_pct <- params_safety_net$fqhc_revenue_reduction
+  # Scale the revenue reduction percentage based on the ratio of coverage loss for worst case
+  revenue_reduction_pct <- if(worst_case_scenario) {
+    params_safety_net$fqhc_revenue_reduction * (coverage_changes$Medicaid_Reduction_M[10] / 10.3)
+  } else {
+    params_safety_net$fqhc_revenue_reduction
+  }
   
   # Create data frame
   healthcare_impacts <- data.frame(
@@ -463,6 +493,9 @@ create_comprehensive_table <- function(coverage_changes, health_outcomes, econom
 # RUN SIMULATION
 #==============================================
 
+# Set scenario name for output files
+scenario_name <- if(worst_case_scenario) "worst_case" else "base_case"
+
 # Calculate coverage changes
 coverage_changes <- calculate_coverage_changes(coverage_params)
 
@@ -490,6 +523,9 @@ comprehensive_table <- create_comprehensive_table(coverage_changes, health_outco
 #==============================================
 # PRINT RESULTS
 #==============================================
+
+# Print scenario information
+print(paste("Running", if(worst_case_scenario) "WORST CASE (CBPP)" else "BASE CASE (CBO)", "scenario"))
 
 # Print coverage changes
 print("Coverage Changes by 2034 (millions):")
@@ -527,40 +563,44 @@ print(comprehensive_table)
 # SAVE RESULTS
 #==============================================
 
+# Create output directory for scenario
+output_dir <- paste0("outputs_", scenario_name)
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir)
+}
+
 # Save coverage changes to CSV
-write.csv(coverage_changes, "coverage_changes.csv", row.names = FALSE)
+write.csv(coverage_changes, paste0(output_dir, "/coverage_changes.csv"), row.names = FALSE)
 
 # Save health outcomes to CSV
-write.csv(health_outcomes, "health_outcomes.csv", row.names = FALSE)
+write.csv(health_outcomes, paste0(output_dir, "/health_outcomes.csv"), row.names = FALSE)
 
 # Save economic impacts to CSV
-write.csv(economic_impacts, "economic_impacts.csv", row.names = FALSE)
+write.csv(economic_impacts, paste0(output_dir, "/economic_impacts.csv"), row.names = FALSE)
 
 # Save healthcare system impacts to CSV
-write.csv(healthcare_impacts, "healthcare_impacts.csv", row.names = FALSE)
+write.csv(healthcare_impacts, paste0(output_dir, "/healthcare_impacts.csv"), row.names = FALSE)
 
 # Save work requirements impact to CSV
-write.csv(work_req_impact, "work_requirements_impact.csv", row.names = FALSE)
+write.csv(work_req_impact, paste0(output_dir, "/work_requirements_impact.csv"), row.names = FALSE)
 
 # Save medical debt impact to CSV
-write.csv(medical_debt_impact, "medical_debt_impact.csv", row.names = FALSE)
+write.csv(medical_debt_impact, paste0(output_dir, "/medical_debt_impact.csv"), row.names = FALSE)
 
 # Save headline metrics to CSV
-write.csv(headline_metrics, "headline_metrics.csv", row.names = FALSE)
+write.csv(headline_metrics, paste0(output_dir, "/headline_metrics.csv"), row.names = FALSE)
 
 # Save comprehensive table to CSV
-write.csv(comprehensive_table, "comprehensive_table.csv", row.names = FALSE)
+write.csv(comprehensive_table, paste0(output_dir, "/comprehensive_table.csv"), row.names = FALSE)
 
 #==============================================
 # CREATE VISUALIZATIONS
 #==============================================
 
 # Create directory for figures if it doesn't exist
-if (!dir.exists("outputs")) {
-  dir.create("outputs")
-}
-if (!dir.exists("outputs/figures")) {
-  dir.create("outputs/figures")
+figures_dir <- paste0(output_dir, "/figures")
+if (!dir.exists(figures_dir)) {
+  dir.create(figures_dir)
 }
 
 # Figure 1: Health Outcomes
@@ -586,7 +626,8 @@ p1 <- ggplot(health_outcomes_long, aes(x = Year, y = Value, color = Outcome, gro
   facet_wrap(~ Outcome, scales = "free_y", ncol = 2) +
   theme_minimal() +
   labs(
-    title = "Projected Health Outcomes of Medicaid Policy Changes",
+    title = paste("Projected Health Outcomes of Medicaid Policy Changes -", 
+                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Outcome"
@@ -599,7 +640,7 @@ p1 <- ggplot(health_outcomes_long, aes(x = Year, y = Value, color = Outcome, gro
     axis.text = element_text(size = 10)
   )
 
-ggsave("outputs/figures/figure1_health_outcomes.png", p1, width = 10, height = 8, dpi = 300)
+ggsave(paste0(figures_dir, "/figure1_health_outcomes.png"), p1, width = 10, height = 8, dpi = 300)
 
 # Figure 2: Coverage Changes
 coverage_changes_long <- data.frame(
@@ -625,7 +666,8 @@ p2 <- ggplot(coverage_changes_long, aes(x = Year, y = Value, color = Category, g
   geom_point(size = 3) +
   theme_minimal() +
   labs(
-    title = "Projected Coverage Changes from Medicaid Policy Proposals",
+    title = paste("Projected Coverage Changes from Medicaid Policy Proposals -", 
+                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Population (millions)",
     color = "Category"
@@ -639,7 +681,7 @@ p2 <- ggplot(coverage_changes_long, aes(x = Year, y = Value, color = Category, g
     legend.text = element_text(size = 10)
   )
 
-ggsave("outputs/figures/figure2_coverage_changes.png", p2, width = 10, height = 8, dpi = 300)
+ggsave(paste0(figures_dir, "/figure2_coverage_changes.png"), p2, width = 10, height = 8, dpi = 300)
 
 # Figure 3: Economic Impacts
 economic_impacts_long <- data.frame(
@@ -664,7 +706,8 @@ p3 <- ggplot(economic_impacts_long, aes(x = Year, y = Value, color = Category, g
   facet_wrap(~ Category, scales = "free_y", ncol = 2) +
   theme_minimal() +
   labs(
-    title = "Projected Economic Impacts of Medicaid Policy Changes",
+    title = paste("Projected Economic Impacts of Medicaid Policy Changes -", 
+                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Category"
@@ -677,7 +720,7 @@ p3 <- ggplot(economic_impacts_long, aes(x = Year, y = Value, color = Category, g
     axis.text = element_text(size = 10)
   )
 
-ggsave("outputs/figures/figure3_economic_impacts.png", p3, width = 10, height = 8, dpi = 300)
+ggsave(paste0(figures_dir, "/figure3_economic_impacts.png"), p3, width = 10, height = 8, dpi = 300)
 
 # Figure 4: Healthcare System Impacts
 healthcare_impacts_long <- data.frame(
@@ -700,7 +743,8 @@ p4 <- ggplot(healthcare_impacts_long, aes(x = Year, y = Value, color = Category,
   facet_wrap(~ Category, scales = "free_y", ncol = 2) +
   theme_minimal() +
   labs(
-    title = "Projected Healthcare System Impacts of Medicaid Policy Changes",
+    title = paste("Projected Healthcare System Impacts of Medicaid Policy Changes -", 
+                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Category"
@@ -713,7 +757,7 @@ p4 <- ggplot(healthcare_impacts_long, aes(x = Year, y = Value, color = Category,
     axis.text = element_text(size = 10)
   )
 
-ggsave("outputs/figures/figure4_health_system_impacts.png", p4, width = 10, height = 8, dpi = 300)
+ggsave(paste0(figures_dir, "/figure4_health_system_impacts.png"), p4, width = 10, height = 8, dpi = 300)
 
 # Figure 5: Work Requirements Impact
 work_req_impact_long <- data.frame(
@@ -736,7 +780,8 @@ p5 <- ggplot(work_req_impact_long, aes(x = Year, y = Value, color = Category, gr
   facet_wrap(~ Category, scales = "free_y", ncol = 2) +
   theme_minimal() +
   labs(
-    title = "Projected Impact of Medicaid Work Requirements",
+    title = paste("Projected Impact of Medicaid Work Requirements -", 
+                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Category"
@@ -749,7 +794,7 @@ p5 <- ggplot(work_req_impact_long, aes(x = Year, y = Value, color = Category, gr
     axis.text = element_text(size = 10)
   )
 
-ggsave("outputs/figures/figure5_work_requirements_impact.png", p5, width = 10, height = 8, dpi = 300)
+ggsave(paste0(figures_dir, "/figure5_work_requirements_impact.png"), p5, width = 10, height = 8, dpi = 300)
 
 # Figure 6: Medical Debt Impact
 medical_debt_impact_long <- data.frame(
@@ -772,7 +817,8 @@ p6 <- ggplot(medical_debt_impact_long, aes(x = Year, y = Value, color = Category
   facet_wrap(~ Category, scales = "free_y", ncol = 2) +
   theme_minimal() +
   labs(
-    title = "Projected Medical Debt Impact of Medicaid Policy Changes",
+    title = paste("Projected Medical Debt Impact of Medicaid Policy Changes -", 
+                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Population (millions)",
     color = "Category"
@@ -785,7 +831,8 @@ p6 <- ggplot(medical_debt_impact_long, aes(x = Year, y = Value, color = Category
     axis.text = element_text(size = 10)
   )
 
-ggsave("outputs/figures/figure6_medical_debt_impact.png", p6, width = 10, height = 8, dpi = 300)
+ggsave(paste0(figures_dir, "/figure6_medical_debt_impact.png"), p6, width = 10, height = 8, dpi = 300)
 
 # Print completion message
-print("Simulation complete. Results saved to CSV files and figures generated.")
+print(paste("Simulation complete for", if(worst_case_scenario) "WORST CASE (CBPP)" else "BASE CASE (CBO)", "scenario."))
+print(paste("Results saved to", output_dir, "directory and figures generated."))
