@@ -3,7 +3,7 @@
 # This model projects the health system and economic impacts of proposed Medicaid policy changes
 # All parameters are empirically derived from peer-reviewed literature and authoritative sources
 # Code is designed to be fully reproducible by independent reviewers
-# Includes both CBO (base case) and CBPP (worst case) scenarios
+# Includes both CBO (base case) and CBPP (higher impact) scenarios
 
 # Load required libraries
 library(ggplot2)
@@ -17,8 +17,8 @@ set.seed(123)
 # SCENARIO SELECTION
 #==============================================
 
-# Set to TRUE for worst case scenario (CBPP projections), FALSE for base case (CBO projections)
-worst_case_scenario <- FALSE
+# Set to TRUE for higher impact scenario (CBPP projections), FALSE for base case (CBO projections)
+higher_impact_scenario <- F
 
 #==============================================
 # EMPIRICALLY VALIDATED PARAMETERS FROM LITERATURE
@@ -33,7 +33,7 @@ cbo_coverage_params <- list(
   uninsured_increase = 7.6          # Millions becoming uninsured (CBO, 2025)
 )
 
-# Worst case: Coverage change parameters from CBPP projections
+# Higher impact: Coverage change parameters from CBPP projections
 cbpp_coverage_params <- list(
   medicaid_reduction = 14.4,        # Millions losing Medicaid by 2034 (CBPP, 2025)
   state_only_reduction = 1.4,       # Millions losing state-only coverage by 2034 (same as CBO)
@@ -43,7 +43,7 @@ cbpp_coverage_params <- list(
 )
 
 # Select coverage parameters based on scenario
-coverage_params <- if(worst_case_scenario) cbpp_coverage_params else cbo_coverage_params
+coverage_params <- if(higher_impact_scenario) cbpp_coverage_params else cbo_coverage_params
 
 # Health outcome parameters from peer-reviewed literature
 health_outcome_params <- list(
@@ -86,13 +86,11 @@ economic_params <- list(
   local_tax_pct = 37.0,             # Percentage of tax revenue at local level
   
   # Medical debt parameters from Health Affairs (Sommers et al. 2020;39(9):1522-1530)
-  medical_debt_per_uninsured = 3864,    # Average medical debt increase per person losing coverage
+  medical_debt_per_uninsured = 1001,    # Median medical debt per person losing coverage
   medical_debt_serious_problem_pct = 50.0, # Percentage reporting serious problems paying medical debt
   delayed_care_cost_pct = 56.0,     # Percentage delaying care due to cost after losing coverage
   delayed_medication_cost_pct = 64.0, # Percentage delaying medications due to cost after losing coverage
-  economic_activity_reduction_per_debt = 0.5,  # Economic activity reduction per dollar of medical debt
-  employment_barrier_pct = 8.4,         # Percentage with employment barriers due to medical debt
-  economic_loss_per_employment_barrier = 25000 # Economic loss per person with employment barriers
+  economic_activity_reduction_per_debt = 0.5  # Economic activity reduction per dollar of medical debt
 )
 
 # Rural hospital impact parameters from Sheps Center and peer-reviewed literature
@@ -218,13 +216,6 @@ calculate_economic_impacts <- function(coverage_changes, params) {
   # Calculate economic activity reduction from medical debt
   economic_activity_reduction_B <- medical_debt_B * params$economic_activity_reduction_per_debt
   
-  # Calculate employment barriers from medical debt
-  employment_barriers_M <- coverage_changes$Uninsured_Increase_M * params$employment_barrier_pct / 100
-  
-  # Calculate economic loss from employment barriers
-  economic_loss_barriers_B <- employment_barriers_M * 1000000 * 
-    params$economic_loss_per_employment_barrier / 1000000000
-  
   # Create data frame
   economic_impacts <- data.frame(
     Year = coverage_changes$Year,
@@ -233,9 +224,7 @@ calculate_economic_impacts <- function(coverage_changes, params) {
     GDP_Reduction_B = round(gdp_reduction_B, 1),
     Tax_Revenue_Reduction_B = round(tax_revenue_reduction_B, 1),
     Medical_Debt_B = round(medical_debt_B, 1),
-    Economic_Activity_Reduction_B = round(economic_activity_reduction_B, 1),
-    Employment_Barriers_M = round(employment_barriers_M, 1),
-    Economic_Loss_Barriers_B = round(economic_loss_barriers_B, 1)
+    Economic_Activity_Reduction_B = round(economic_activity_reduction_B, 1)
   )
   
   return(economic_impacts)
@@ -244,8 +233,8 @@ calculate_economic_impacts <- function(coverage_changes, params) {
 # Function to calculate healthcare system impacts
 calculate_healthcare_impacts <- function(coverage_changes, params_rural, params_safety_net) {
   # Calculate rural hospital impacts
-  # For worst case scenario, scale the closure risk increase based on the ratio of coverage loss
-  medicaid_reduction_ratio <- if(worst_case_scenario) {
+  # For higher impact scenario, scale the closure risk increase based on the ratio of coverage loss
+  medicaid_reduction_ratio <- if(higher_impact_scenario) {
     coverage_changes$Medicaid_Reduction_M / 10.3  # Ratio relative to CBO base case
   } else {
     coverage_changes$Medicaid_Reduction_M / 10.3
@@ -266,8 +255,8 @@ calculate_healthcare_impacts <- function(coverage_changes, params_rural, params_
   revenue_change <- (medicaid_patients_lost * params_safety_net$fqhc_revenue_medicaid -
                      uninsured_patients_gained * params_safety_net$fqhc_revenue_uninsured) / 1000000000
   
-  # Scale the revenue reduction percentage based on the ratio of coverage loss for worst case
-  revenue_reduction_pct <- if(worst_case_scenario) {
+  # Scale the revenue reduction percentage based on the ratio of coverage loss for higher impact
+  revenue_reduction_pct <- if(higher_impact_scenario) {
     params_safety_net$fqhc_revenue_reduction * (coverage_changes$Medicaid_Reduction_M[10] / 10.3)
   } else {
     params_safety_net$fqhc_revenue_reduction
@@ -379,16 +368,16 @@ calculate_headline_metrics <- function(health_outcomes, economic_impacts, covera
   headline_metrics <- data.frame(
     Metric = c("Deaths", "Preventable Hospitalizations", "Jobs Lost", "GDP Reduction ($M)"),
     Per_100K_Coverage_Loss = c(
-      round(deaths_per_100k_coverage, 1),
-      round(hospitalizations_per_100k_coverage, 0),
-      round(jobs_lost_per_100k_coverage, 0),
-      round(gdp_reduction_per_100k_coverage / 1000000, 1)
+      round(deaths_per_100k_coverage, 2),
+      round(hospitalizations_per_100k_coverage, 2),
+      round(jobs_lost_per_100k_coverage, 2),
+      round(gdp_reduction_per_100k_coverage / 1000000, 2)
     ),
     Per_1M_Spending_Reduction = c(
       round(deaths_per_1M_spending, 2),
-      round(hospitalizations_per_1M_spending, 0),
-      round(jobs_lost_per_1M_spending, 1),
-      round(gdp_reduction_per_1M_spending, 1)
+      round(hospitalizations_per_1M_spending, 2),
+      round(jobs_lost_per_1M_spending, 2),
+      round(gdp_reduction_per_1M_spending, 2)
     )
   )
   
@@ -423,8 +412,6 @@ create_comprehensive_table <- function(coverage_changes, health_outcomes, econom
       "Tax Revenue Reduction ($ billions)",
       "Medical Debt ($ billions)",
       "Economic Activity Reduction from Medical Debt ($ billions)",
-      "People with Employment Barriers Due to Medical Debt (millions)",
-      "Economic Loss from Employment Barriers ($ billions)",
       "",
       "Healthcare System Impacts (annual)",
       "Rural Hospitals at High Risk of Closure",
@@ -464,8 +451,6 @@ create_comprehensive_table <- function(coverage_changes, health_outcomes, econom
       round(economic_impacts$Tax_Revenue_Reduction_B[final_year], 1),
       round(economic_impacts$Medical_Debt_B[final_year], 1),
       round(economic_impacts$Economic_Activity_Reduction_B[final_year], 1),
-      round(economic_impacts$Employment_Barriers_M[final_year], 1),
-      round(economic_impacts$Economic_Loss_Barriers_B[final_year], 1),
       "",
       "",
       format(healthcare_impacts$At_Risk_Rural_Hospitals[final_year], big.mark=","),
@@ -494,7 +479,7 @@ create_comprehensive_table <- function(coverage_changes, health_outcomes, econom
 #==============================================
 
 # Set scenario name for output files
-scenario_name <- if(worst_case_scenario) "worst_case" else "base_case"
+scenario_name <- if(higher_impact_scenario) "higher_impact" else "base_case"
 
 # Calculate coverage changes
 coverage_changes <- calculate_coverage_changes(coverage_params)
@@ -525,7 +510,7 @@ comprehensive_table <- create_comprehensive_table(coverage_changes, health_outco
 #==============================================
 
 # Print scenario information
-print(paste("Running", if(worst_case_scenario) "WORST CASE (CBPP)" else "BASE CASE (CBO)", "scenario"))
+print(paste("Running", if(higher_impact_scenario) "HIGHER IMPACT (CBPP)" else "BASE CASE (CBO)", "scenario"))
 
 # Print coverage changes
 print("Coverage Changes by 2034 (millions):")
@@ -627,7 +612,7 @@ p1 <- ggplot(health_outcomes_long, aes(x = Year, y = Value, color = Outcome, gro
   theme_minimal() +
   labs(
     title = paste("Projected Health Outcomes of Medicaid Policy Changes -", 
-                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
+                 if(higher_impact_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Outcome"
@@ -667,7 +652,7 @@ p2 <- ggplot(coverage_changes_long, aes(x = Year, y = Value, color = Category, g
   theme_minimal() +
   labs(
     title = paste("Projected Coverage Changes from Medicaid Policy Proposals -", 
-                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
+                 if(higher_impact_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Population (millions)",
     color = "Category"
@@ -707,7 +692,7 @@ p3 <- ggplot(economic_impacts_long, aes(x = Year, y = Value, color = Category, g
   theme_minimal() +
   labs(
     title = paste("Projected Economic Impacts of Medicaid Policy Changes -", 
-                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
+                 if(higher_impact_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Category"
@@ -744,7 +729,7 @@ p4 <- ggplot(healthcare_impacts_long, aes(x = Year, y = Value, color = Category,
   theme_minimal() +
   labs(
     title = paste("Projected Healthcare System Impacts of Medicaid Policy Changes -", 
-                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
+                 if(higher_impact_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Category"
@@ -781,7 +766,7 @@ p5 <- ggplot(work_req_impact_long, aes(x = Year, y = Value, color = Category, gr
   theme_minimal() +
   labs(
     title = paste("Projected Impact of Medicaid Work Requirements -", 
-                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
+                 if(higher_impact_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Impact",
     color = "Category"
@@ -818,7 +803,7 @@ p6 <- ggplot(medical_debt_impact_long, aes(x = Year, y = Value, color = Category
   theme_minimal() +
   labs(
     title = paste("Projected Medical Debt Impact of Medicaid Policy Changes -", 
-                 if(worst_case_scenario) "CBPP Projection" else "CBO Projection"),
+                 if(higher_impact_scenario) "CBPP Projection" else "CBO Projection"),
     x = "Year",
     y = "Population (millions)",
     color = "Category"
@@ -834,5 +819,5 @@ p6 <- ggplot(medical_debt_impact_long, aes(x = Year, y = Value, color = Category
 ggsave(paste0(figures_dir, "/figure6_medical_debt_impact.png"), p6, width = 10, height = 8, dpi = 300)
 
 # Print completion message
-print(paste("Simulation complete for", if(worst_case_scenario) "WORST CASE (CBPP)" else "BASE CASE (CBO)", "scenario."))
+print(paste("Simulation complete for", if(higher_impact_scenario) "HIGHER IMPACT (CBPP)" else "BASE CASE (CBO)", "scenario."))
 print(paste("Results saved to", output_dir, "directory and figures generated."))
